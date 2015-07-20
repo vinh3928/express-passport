@@ -4,6 +4,7 @@ var path = require('path');
 var favicon = require('serve-favicon');
 var logger = require('morgan');
 var cookieParser = require('cookie-parser');
+var cookieSession = require('cookie-session');
 var bodyParser = require('body-parser');
 var LinkedInStrategy = require('passport-linkedin-oauth2').Strategy;
 var passport = require('passport');
@@ -18,7 +19,9 @@ passport.use(new LinkedInStrategy({
   clientSecret: process.env.LINKEDIN_CLIENT_SECRET,
   callbackURL: process.env.HOST + "/auth/linkedin/callback",
   scope: ['r_emailaddress', 'r_basicprofile'],
+  state: true
 }, function(accessToken, refreshToken, profile, done) {
+   done(null, {id: profile.id, displayName: profile.displayName})
   // asynchronous verification, for effect...
   process.nextTick(function () {
     // To keep the example simple, the user's LinkedIn profile is returned to
@@ -29,6 +32,8 @@ passport.use(new LinkedInStrategy({
   });
 }));
 
+app.set('trust proxy', 1) // trust first proxy
+
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -36,6 +41,11 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'hbs');
 // uncomment after placing your favicon in /public
 //app.use(favicon(path.join(__dirname, 'public', 'favicon.ico')));
+app.use(cookieSession({
+  name: 'session',
+  keys: [process.env.SECRET1, process.env.SECRET2]
+}));
+
 app.use(logger('dev'));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -52,10 +62,15 @@ passport.deserializeUser(function(user, done) {
   done(null, user);
 });
 
+app.use(function (req, res, next) {
+  res.locals.user = req.user
+  next()
+})
+
 app.use('/', routes);
 app.use('/users', users);
 app.get('/auth/linkedin',
-  passport.authenticate('linkedin', { state: process.env.LINKEDIN_STATE  }),
+  passport.authenticate('linkedin'),
   function(req, res){
     // The request will be redirected to LinkedIn for authentication, so this
     // function will not be called.
